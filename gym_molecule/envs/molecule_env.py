@@ -7,14 +7,17 @@ class MoleculeEnvironment(gym.Env):
     def __init__(self):
         super().__init__()
 
-    def step(self):
-        raise NotImplementedError
+    def step(self, action):
+        print("step")
 
     def reset(self):
-        raise NotImplementedError
+        print("reset")
 
-    def render(self):
-        raise NotImplementedError
+    def render(self, mode='human', close=False):
+        print("render")
 
     def seed(self):
-        raise NotImplementedError
+        print("seed not set")
+
+    def close(self):
+        print("Closing application")
