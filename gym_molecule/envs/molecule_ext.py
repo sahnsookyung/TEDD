@@ -1,22 +1,30 @@
 import gym
 import numpy as np
+from gym.utils import seeding
 from rdkit import Chem  # for debug
 
 
 class MoleculeEnvironment():
-    def __init__(self, reward_function):
+    def __init__(self, reward_function, n_iterations, max_iterations, max_molecule_size=7):
         """
         :param reward_function: A function that returns a reward value
         :param possible_atom_types: The elements of the periodic table used in this class
+        :param n_iterations: The number of iterations before an interim reward is retured
+        :param max_iterations: User specified, the environment stop after this many iterations
+
         """
 
         # Default values
-        self.possible_atoms = ['C', 'N', 'O']
+        self.possible_atoms = ['C', 'N', 'O', 'S', 'Cl']
 
         self.possible_bonds = [Chem.rdchem.BondType.SINGLE, Chem.rdchem.BondType.DOUBLE,
                                Chem.rdchem.BondType.TRIPLE]
-        self.max_possible_atoms = 5
+        self.max_molecule_size = max_molecule_size
 
+        self.n_iterations = n_iterations
+        self.max_iterations = max_iterations
+        self.interim_reward = 0
+        self.cumulative_reward = 0
 
         self.mol = Chem.RWMol()
         self.possible_atom_types = np.array(self.possible_atoms)  # dim d_n. Array that
@@ -28,52 +36,112 @@ class MoleculeEnvironment():
         self.total_bonds = 0
         self.reward_function = reward_function
 
+        # counter for number of steps
+        self.counter = 0
+
         self.action_space = gym.spaces.MultiDiscrete(
-            [len(self.possible_atom_types), self.max_possible_atoms,
-             self.max_possible_atoms, len(self.possible_bonds)]
+            [len(self.possible_atom_types), self.max_molecule_size,
+             self.max_molecule_size, len(self.possible_bonds)]
         )
 
+        # param adj: adjacency matrix, numpy array, dim k x k.
+        # param edge: edge attribute matrix, numpy array, dim k x k x de.
+        # param node: node attribute matrix, numpy array, dim k x dn.
+        # k: maximum atoms in molecule
+        # de: possible bond types
+        # dn: possible atom types
+        self.observation_space = {
+            'adj': gym.Space(shape=[1, self.max_molecule_size, self.max_molecule_size]),
+            'edge': gym.Space(shape=[len(self.possible_bonds), self.max_molecule_size, self.max_molecule_size]),
+            'node': gym.Space(shape=[1, self.max_molecule_size, len(self.possible_atom_types)])
+        }
 
     def reset(self):
         self.mol = Chem.RWMol()
         self.current_atom_idx = None
 
-        self._add_atom([0, 0, 0, 0])
-
         self.total_atoms = 0
         self.total_bonds = 0
 
-    def step(self, action, action_type):
+        self.interim_reward = 0
+        self.cumulative_reward = 0
+        self.counter = 0
+
+        self._add_atom([0, 0, 0, 0])
+
+    def step(self, action):
         """
-    Perform a given action
-    :param action:
-    :param action_type:
-    :return: reward of 1 if resulting molecule graph does not exceed valency,
-    -1 if otherwise
-    """
-        if action_type == 'add_atom':
-            self._add_atom(action)
-        elif action_type == 'modify_bond':
-            self._modify_bond(action)
-        else:
-            raise ValueError('Invalid action')
+        Perform a given action
+        :param action:
+        :param action_type:
+        :return: reward of 1 if resulting molecule graph does not exceed valency,
+        -1 if otherwise
+        """
+        # TODO
+        #  add an interim reward for return every n iterations
+        #  add reward for return on termination
+
+        info = {}
+
+        # print(action.shape)
+        assert action.shape
+        self._add_atom(action)
+        self._modify_bond(action)
 
         # calculate rewards
         if self.check_valency():
-            return self.reward_function  # arbitrary choice
+            reward = self.reward_function  # arbitrary choice
         else:
-            return -self.reward_function  # arbitrary choice
+            reward = -self.reward_function  # arbitrary choice
+
+        # self.interim_reward += reward
+        self.cumulative_reward += reward
+        self.interim_reward += reward
+
+        observation = self.get_matrices()
+
+        # append to info
+        info['smiles'] = Chem.MolToSmiles(self.mol)
+        info['reward'] = reward
+
+        if self.counter % self.n_iterations == 0:
+            info['interim_reward'] = self.get_interim_reward()
+        info['cumulative_reward'] = self.cumulative_reward
+
+        self.counter += 1
+
+        # Check if we need to terminate
+        terminate_condition = (self.mol.GetNumAtoms() >= self.max_molecule_size or
+                               self.counter >= self.max_iterations)
+        if terminate_condition:
+            done = True
+        else:
+            done = False
+
+        return observation, reward, done, info
 
     def render(self):
         print(Chem.MolToSmiles(self.mol))
 
+    def seed(self, seed=None):
+        np_random, seed = seeding.np_random(seed)
+        return [seed]
+
+    def get_interim_reward(self):
+        """
+        :return: returns the interim_reward and resets it to zero
+        """
+        reward = self.interim_reward
+        self.interim_reward = 0
+        return reward
+
     def _add_atom(self, action):
         """
-    Adds an atom
-    :param action: one hot np array of dim d_n, where d_n is the number of
-    atom types
-    :return:
-    """
+        Adds an atom
+        :param action: one hot np array of dim d_n, where d_n is the number of
+        atom types
+        :return:
+        """
         # assert action.shape == (len(self.possible_atom_types),)
         atom_type_idx = action[0]
         atom_symbol = self.possible_atom_types[atom_type_idx]
@@ -82,11 +150,11 @@ class MoleculeEnvironment():
 
     def _modify_bond(self, action):
         """
-    Adds or modifies a bond (currently no deletion is allowed)
-    :param action: np array of dim N-1 x d_e, where N is the current total
-    number of atoms, d_e is the number of bond types
-    :return:
-    """
+        Adds or modifies a bond (currently no deletion is allowed)
+        :param action: np array of dim N-1 x d_e, where N is the current total
+        number of atoms, d_e is the number of bond types
+        :return:
+        """
         # print("Action space [modify bond]: ", action.shape)
         # assert action.shape == (self.current_atom_idx, len(self.possible_bond_types))
         # other_atom_idx = int(np.argmax(action.sum(axis=1)))  # b/c
@@ -116,10 +184,10 @@ class MoleculeEnvironment():
     # TODO(Bowen): check
     def check_chemical_validity(self):
         """
-    Checks the chemical validity of the mol object. Existing mol object is
-    not modified
-    :return: True if chemically valid, False otherwise
-    """
+        Checks the chemical validity of the mol object. Existing mol object is
+        not modified
+        :return: True if chemically valid, False otherwise
+        """
         s = Chem.MolToSmiles(self.mol, isomericSmiles=True)
         m = Chem.MolFromSmiles(s)  # implicitly performs sanitization
         if m:
@@ -130,10 +198,10 @@ class MoleculeEnvironment():
     # TODO(Bowen): check
     def check_valency(self):
         """
-    Checks that no atoms in the mol have exceeded their possible
-    valency
-    :return: True if no valency issues, False otherwise
-    """
+        Checks that no atoms in the mol have exceeded their possible
+        valency
+        :return: True if no valency issues, False otherwise
+        """
         try:
             Chem.SanitizeMol(self.mol,
                              sanitizeOps=Chem.SanitizeFlags.SANITIZE_PROPERTIES)
@@ -143,11 +211,11 @@ class MoleculeEnvironment():
 
     def get_matrices(self):
         """
-    Get the adjacency matrix, edge feature matrix and, node feature matrix
-    of the current molecule graph
-    :return: np arrays: adjacency matrix, dim n x n; edge feature matrix,
-    dim n x n x d_e; node feature matrix, dim n x d_n
-    """
+        Get the adjacency matrix, edge feature matrix and, node feature matrix
+        of the current molecule graph
+        :return: np arrays: adjacency matrix, dim n x n; edge feature matrix,
+        dim n x n x d_e; node feature matrix, dim n x d_n
+        """
         A_no_diag = Chem.GetAdjacencyMatrix(self.mol)
         A = A_no_diag + np.eye(*A_no_diag.shape)
 
@@ -179,18 +247,18 @@ class MoleculeEnvironment():
 # for testing get_matrices
 def matrices_to_mol(A, E, F, node_feature_list, edge_feature_list):
     """
-  Converts matrices A, E, F to rdkit mol object
-  :param A: adjacency matrix, numpy array, dim k x k. Entries are either 0 or 1
-  :param E: edge attribute matrix, numpy array, dim k x k x de. Entries are
-  edge wise probabilities
-  :param F: node attribute matrix, numpy array, dim k x dn. Entries are node
-  wise probabilities
-  :param node_feature_list: list of d_n elements that specifies possible
-  atomic symbols
-  :param edge_feature_list: list of d_e elements that specifies possible rdkit
-  bond types
-  :return: rdkit mol object
-  """
+    Converts matrices A, E, F to rdkit mol object
+    :param A: adjacency matrix, numpy array, dim k x k. Entries are either 0 or 1
+    :param E: edge attribute matrix, numpy array, dim k x k x de. Entries are
+    edge wise probabilities
+    :param F: node attribute matrix, numpy array, dim k x dn. Entries are node
+    wise probabilities
+    :param node_feature_list: list of d_n elements that specifies possible
+    atomic symbols
+    :param edge_feature_list: list of d_e elements that specifies possible rdkit
+    bond types
+    :return: rdkit mol object
+    """
 
     k = A.shape[0]
 
@@ -227,25 +295,26 @@ def reward_func():
     return 1
 
 
-env = MoleculeEnvironment(reward_func())
+env = MoleculeEnvironment(reward_func(), n_iterations=1, max_iterations=10)
+print("Seed: ", env.seed())
+
 # add carbon
 env.reset()
-env.step(np.array([2, 0, 1, 0]), 'add_atom')
-env.step(np.array([2, 0, 1, 0]), 'modify_bond')
+ob, reward, done, info = env.step(np.array([2, 0, 1, 0]))
+print(Chem.MolToSmiles(env.mol))
+print("info* ", info)
+
+ob, reward, done, info = env.step(np.array([2, 0, 2, 0]))
+print(Chem.MolToSmiles(env.mol))
+print("info* ", info)
+
+ob, reward, done, info = env.step(np.array([2, 0, 3, 0]))
 print(Chem.MolToSmiles(env.mol))
 
-env.step(np.array([2, 0, 2, 0]), 'add_atom')
-env.step(np.array([2, 0, 2, 0]), 'modify_bond')
+env.step(np.array([2, 0, 4, 0]))
 print(Chem.MolToSmiles(env.mol))
 
-env.step(np.array([2, 0, 3, 0]), 'add_atom')
-env.step(np.array([2, 0, 3, 0]), 'modify_bond')
-print(Chem.MolToSmiles(env.mol))
-
-env.step(np.array([2, 0, 4, 0]), 'add_atom')
-env.step(np.array([2, 0, 4, 0]), 'modify_bond')
-print(Chem.MolToSmiles(env.mol))
-
+env.mol
 
 # # add carbon
 # env.step(np.array([1, 0, 0]), 'add_atom')
@@ -263,18 +332,18 @@ print(Chem.MolToSmiles(env.mol))
 # env.render()
 # assert Chem.MolToSmiles(env.mol, isomericSmiles=True) == 'C=CCO'
 #
-possible_atoms = ['C', 'N', 'O']
+possible_atoms = ['C', 'N', 'O', 'S', 'Cl']
 possible_bonds = [Chem.rdchem.BondType.SINGLE, Chem.rdchem.BondType.DOUBLE,
                   Chem.rdchem.BondType.TRIPLE]
 # # test get_matrices 1
 print("Testing get_matrices")
 A, E, F = env.get_matrices()
-# print("A:")
-# print(A)
-# print("E:")
-# print(E)
-# print("F:")
-# print(F)
+print("A:")
+print(A)
+print("E:")
+print(E)
+print("F:")
+print(F)
 #
 print(Chem.MolToSmiles(matrices_to_mol(A, E, F, possible_atoms,
                                        possible_bonds), isomericSmiles=True))
