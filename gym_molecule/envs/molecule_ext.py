@@ -1,7 +1,7 @@
 import gym
 import numpy as np
 from gym.utils import seeding
-from rdkit import Chem  # for debug
+from rdkit import Chem
 
 
 class MoleculeEnvironment():
@@ -77,11 +77,9 @@ class MoleculeEnvironment():
         :return: reward of 1 if resulting molecule graph does not exceed valency,
         -1 if otherwise
         """
-        # TODO
-        #  add an interim reward for return every n iterations
-        #  add reward for return on termination
 
         info = {}
+        self.counter += 1
 
         # print(action.shape)
         assert action.shape
@@ -107,8 +105,9 @@ class MoleculeEnvironment():
         if self.counter % self.n_iterations == 0:
             info['interim_reward'] = self.get_interim_reward()
         info['cumulative_reward'] = self.cumulative_reward
+        info['num_steps'] = self.counter
 
-        self.counter += 1
+
 
         # Check if we need to terminate
         terminate_condition = (self.mol.GetNumAtoms() >= self.max_molecule_size or
@@ -295,7 +294,7 @@ def reward_func():
     return 1
 
 
-env = MoleculeEnvironment(reward_func(), n_iterations=1, max_iterations=10)
+env = MoleculeEnvironment(reward_func(), n_iterations=2, max_iterations=10)
 print("Seed: ", env.seed())
 
 # add carbon
