@@ -12,12 +12,9 @@ class MoleculeEnvironment(gym.Env):
         :param possible_atom_types: The elements of the periodic table used in this class
         :param n_iterations: The number of iterations before an interim reward is retured
         :param max_iterations: User specified, the environment stop after this many iterations
-
         """
 
-        # Default values
         self.possible_atoms = ['C', 'N', 'O', 'S', 'Cl']
-
         self.possible_bonds = [Chem.rdchem.BondType.SINGLE, Chem.rdchem.BondType.DOUBLE,
                                Chem.rdchem.BondType.TRIPLE]
         self.max_molecule_size = max_molecule_size
@@ -29,10 +26,10 @@ class MoleculeEnvironment(gym.Env):
 
         self.mol = Chem.RWMol()
 
-        self.possible_atom_types = np.array(self.possible_atoms)  # dim d_n. Array that
-        # contains the possible atom symbols strs
-        self.possible_bond_types = np.array(self.possible_bonds, dtype=object)  # dim
-        # d_e. Array that contains the possible rdkit.Chem.rdchem.BondType objects
+        # dim d_n. Array that contains the possible atom symbols strs
+        self.possible_atom_types = np.array(self.possible_atoms)
+        # dim d_e. Array that contains the possible rdkit.Chem.rdchem.BondType objects
+        self.possible_bond_types = np.array(self.possible_bonds, dtype=object)
         self.current_atom_idx = None
         self.total_atoms = 0
         self.total_bonds = 0
@@ -80,9 +77,11 @@ class MoleculeEnvironment(gym.Env):
         :return: reward of 1 if resulting molecule graph does not exceed valency,
         -1 if otherwise
         """
+
+        # Note: The user-specified action must be valid,
+        # if you want to join atoms at location 2 and 3 with a bond, these atoms must exist through prior actions
         info = {}
 
-        # Check if we need to terminate
         terminate_condition = (self.mol.GetNumAtoms() >= self.max_molecule_size or
                                self.counter >= self.max_iterations)
         if terminate_condition:
@@ -112,7 +111,7 @@ class MoleculeEnvironment(gym.Env):
         info['reward'] = reward
 
         if self.counter % self.n_iterations == 0:
-            info['interim_reward'] = self.get_interim_reward()
+            info['interim_reward'] = self._get_interim_reward()
         info['cumulative_reward'] = self.cumulative_reward
         info['num_steps'] = self.counter
 
@@ -128,7 +127,7 @@ class MoleculeEnvironment(gym.Env):
     def close(self):
         pass
 
-    def get_interim_reward(self):
+    def _get_interim_reward(self):
         """
         :return: returns the interim_reward and resets it to zero
         """
@@ -143,7 +142,6 @@ class MoleculeEnvironment(gym.Env):
         atom types
         :return:
         """
-        # assert action.shape == (len(self.possible_atom_types),)
         atom_type_idx = action[0]
         atom_symbol = self.possible_atom_types[atom_type_idx]
         self.current_atom_idx = self.mol.AddAtom(Chem.Atom(atom_symbol))
@@ -156,23 +154,11 @@ class MoleculeEnvironment(gym.Env):
         number of atoms, d_e is the number of bond types
         :return:
         """
-        # print("Action space [modify bond]: ", action.shape)
-        # assert action.shape == (self.current_atom_idx, len(self.possible_bond_types))
-        # other_atom_idx = int(np.argmax(action.sum(axis=1)))  # b/c
-        # print("Other atom index: ", other_atom_idx, "| action: ", np.argmax(action.sum(axis=1)))
-        # GetBondBetweenAtoms fails for np.int64
-        # bond_type_idx = np.argmax(action.sum(axis=0))
         bond_type = self.possible_bond_types[action[3]]
-
-        # if bond exists between current atom and other atom, modify the bond
-        # type to new bond type. Otherwise create bond between current atom and
-        # other atom with the new bond type
         bond = self.mol.GetBondBetweenAtoms(int(action[1]), int(action[2]))
         if bond:
-            # bond.SetBondType(bond_type)
             pass
         else:
-            # self.mol.AddBond(self.current_atom_idx, other_atom_idx, order=bond_type)
             self.mol.AddBond(int(action[1]), int(action[2]), order=bond_type)
             self.total_bonds += 1
 
@@ -182,7 +168,6 @@ class MoleculeEnvironment(gym.Env):
     def get_num_bonds(self):
         return self.total_bonds
 
-    # TODO(Bowen): check
     def check_chemical_validity(self):
         """
         Checks the chemical validity of the mol object. Existing mol object is
@@ -196,7 +181,6 @@ class MoleculeEnvironment(gym.Env):
         else:
             return False
 
-    # TODO(Bowen): check
     def check_valency(self):
         """
         Checks that no atoms in the mol have exceeded their possible
