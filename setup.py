@@ -6,5 +6,5 @@ setup(name='gym_molecule',
       author="Soo Kyung Ahn",
       author_email="sahnsookyung@gmail.com",
       packages=['gym_molecule'],
-      install_requires=['gym', 'numpy', 'rdkit']
+      install_requires=['gym', 'numpy', 'ipython']
       )

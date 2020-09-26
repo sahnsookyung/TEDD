@@ -50,7 +50,9 @@ def matrices_to_mol(A, E, F, node_feature_list, edge_feature_list):
 
 
 # Define external reward function for MoleculeEnvironment creation
-def reward_func():
+def reward_func(action_space, observation_space):
+    action_space = action_space
+    observation_space = observation_space
     return 1
 
 
@@ -59,6 +61,7 @@ def reward_func():
 # Beginning of tests
 env = molecule_env.MoleculeEnvironment(reward_func(), n_iterations=2, max_iterations=10)
 
+# TODO add tests for rewards, that it is an integer and it either increases or decreases
 
 def test_example():
     assert issubclass(type(env), gym.Env)
@@ -95,3 +98,8 @@ def test_step():
     assert Chem.MolToSmiles(env.mol) == "NCO"
     ob, reward, done, info = env.step([2, 2, 3, 1])
     assert Chem.MolToSmiles(env.mol) == "O=NCO"
+
+def test_render():
+    # Test render method
+    pass
+

@@ -3,11 +3,20 @@ from gym import spaces, utils
 from gym.utils import seeding
 
 from rdkit import Chem
+from rdkit.Chem import AllChem
 
 import numpy as np
+import pymol
+from pymol import cmd
 
 from rdkit import Chem
 from rdkit.Chem import Descriptors
+from rdkit.Chem.PyMol import MolViewer
+from rdkit.Chem import rdmolops
+
+import os
+from rdkit.Chem.Draw import IPythonConsole
+from rdkit.Chem import Draw
 
 import copy
 
@@ -22,9 +31,9 @@ class MoleculeEnvironment(gym.Env):
     def __init__(self, reward_function, n_iterations, max_iterations, max_molecule_size=7):
         """
         :param reward_function: A function that returns a reward value
-        :param possible_atom_types: The elements of the periodic table used in this class
         :param n_iterations: The number of iterations before an interim reward is retured
         :param max_iterations: User specified, the environment stop after this many iterations
+        :param max_molecule_size: The maximum permitted number of atoms in this molecule
         """
 
         self.possible_atoms = ['C', 'N', 'O', 'S', 'Cl']
@@ -68,6 +77,8 @@ class MoleculeEnvironment(gym.Env):
             'node': gym.Space(shape=[1, self.max_molecule_size, len(self.possible_atom_types)])
         }
 
+        self.pymol_window_flag = False
+
     def reset(self):
         self.mol = Chem.RWMol()
         self.current_atom_idx = None
@@ -91,9 +102,12 @@ class MoleculeEnvironment(gym.Env):
         -1 if otherwise
         """
 
+        # TODO Need to implement termination on conditions being fulfilled
+
         # Note: The user-specified action must be valid,
         # if you want to join atoms at location 2 and 3 with a bond, these atoms must exist through prior actions
         info = {}
+        # self.mol_old = copy.deepcopy(self.mol)  # keep old mol
 
         terminate_condition = (self.mol.GetNumAtoms() >= self.max_molecule_size or
                                self.counter >= self.max_iterations)
@@ -108,13 +122,14 @@ class MoleculeEnvironment(gym.Env):
         self._modify_bond(action)
 
         # calculate rewards
-        if self.check_valency():
-            reward = self.reward_function  # arbitrary choice
+        if self.check_valency() and self.check_chemical_validity():
+            reward = self.reward_function(self.action_space, self.observation_space)  # arbitrary choice
         else:
-            reward = -self.reward_function  # arbitrary choice
+            reward = -self.reward_function(self.action_space, self.observation_space)  # arbitrary choice
 
-        # self.interim_reward += reward
         self.cumulative_reward += reward
+        print(self.cumulative_reward)
+
         self.interim_reward += reward
 
         observation = self.get_matrices()
@@ -131,14 +146,39 @@ class MoleculeEnvironment(gym.Env):
         return observation, reward, done, info
 
     def render(self):
-        print(Chem.MolToSmiles(self.mol))
+        # TODO add some exception handling, since the PYMOL server needs to be online for this to work
+        if not self.pymol_window_flag:
+            self.start_pymol()
+
+        molecule = self.mol
+        # Generate 3D structure information
+        # Code adapted from https://github.com/rdkit/rdkit/issues/1433
+        Chem.AddHs(molecule)
+
+        # remove stereochemistry information
+        rdmolops.RemoveStereochemistry(molecule)
+        AllChem.EmbedMolecule(molecule)
+        AllChem.MMFFOptimizeMolecule(molecule)
+
+        v = MolViewer()
+        v.ShowMol(molecule)
+        v.GetPNG(h=400)
+
+    def start_pymol(self):
+        pymol.pymol_argv = ['pymol', '-R']
+        pymol.finish_launching()
+        self.pymol_window_flag = True
+
+    def end_pymol(self):
+        pymol.cmd.quit()
+        self.pymol_window_flag = False
 
     def seed(self, seed=None):
         np_random, seed = seeding.np_random(seed)
         return [seed]
 
     def close(self):
-        pass
+        self.end_pymol()
 
     def _get_interim_reward(self):
         """
