@@ -1,42 +1,41 @@
+import errno
+
 import gym
-from gym import spaces, utils
 from gym.utils import seeding
 
-from rdkit import Chem
 from rdkit.Chem import AllChem
 
 import numpy as np
 import pymol
-from pymol import cmd
 
 from rdkit import Chem
-from rdkit.Chem import Descriptors
+
 from rdkit.Chem.PyMol import MolViewer
 from rdkit.Chem import rdmolops
-
+from rdkit.Chem.rdmolops import FastFindRings
 import os
-from rdkit.Chem.Draw import IPythonConsole
-from rdkit.Chem import Draw
 
 import copy
 
 
-# TODO
-# 1. create action_space and observation_space
-# 2. define all env methods
-# 3. create the interface between env and agent
-# 4. placeholder methods for choosing an action and for calculating a reward
+# TODO make sure the reward function only deals with the reward
+#  revert to old molecule if necessary using copy function
+#  compare the current product to the reference product
 
 class MoleculeEnvironment(gym.Env):
-    def __init__(self, reward_function, n_iterations, max_iterations, max_molecule_size=7):
+    def __init__(self, reward_function, n_iterations, max_iterations, max_molecule_size=7, possible_atoms=None):
         """
         :param reward_function: A function that returns a reward value
         :param n_iterations: The number of iterations before an interim reward is retured
         :param max_iterations: User specified, the environment stop after this many iterations
         :param max_molecule_size: The maximum permitted number of atoms in this molecule
+        :param possible_atoms: List of elements of the periodic table to be used in the environment
+        :param initial_atom: The atom to start the process with when reset() is called
         """
 
-        self.possible_atoms = ['C', 'N', 'O', 'S', 'Cl']
+        if possible_atoms is None:
+            possible_atoms = ['C', 'N', 'O', 'S', 'Cl']
+        self.possible_atoms = possible_atoms
         self.possible_bonds = [Chem.rdchem.BondType.SINGLE, Chem.rdchem.BondType.DOUBLE,
                                Chem.rdchem.BondType.TRIPLE]
         self.max_molecule_size = max_molecule_size
@@ -53,8 +52,7 @@ class MoleculeEnvironment(gym.Env):
         # dim d_e. Array that contains the possible rdkit.Chem.rdchem.BondType objects
         self.possible_bond_types = np.array(self.possible_bonds, dtype=object)
         self.current_atom_idx = None
-        self.total_atoms = 0
-        self.total_bonds = 0
+
         self.reward_function = reward_function
 
         # counter for number of steps
@@ -79,27 +77,35 @@ class MoleculeEnvironment(gym.Env):
 
         self.pymol_window_flag = False
 
-    def reset(self):
-        self.mol = Chem.RWMol()
-        self.current_atom_idx = None
+        try:
+            os.makedirs("./pymol_renderings")
+        except OSError as e:
+            if e.errno != errno.EEXIST:
+                raise
 
-        self.total_atoms = 0
-        self.total_bonds = 0
+    def reset(self, molecule=None):
+        """
+        :param molecule: SMILES string specifying the molecule to start with when the reset function is called
+        :return:
+        """
+        self.mol = Chem.RWMol()
+        if molecule is None:
+            self._add_atom([0, 0, 0, 0])
+        else:
+            self.mol = Chem.RWMol(Chem.MolFromSmiles(molecule))
+
+        self.current_atom_idx = None
 
         self.interim_reward = 0
         self.cumulative_reward = 0
         self.counter = 0
 
-        # Total atoms = 1 at this point
-        self._add_atom([0, 0, 0, 0])
-
+    # TODO: Think about how to constrain the action to the valid actions (e.g. no atoms trying to bond to non-existing atoms)
     def step(self, action):
         """
         Perform a given action
-        :param action:
-        :param action_type:
-        :return: reward of 1 if resulting molecule graph does not exceed valency,
-        -1 if otherwise
+        :param action: a list of 4 elements [atom_type, atom_index_1, atom_index_2, bond_type]
+        :return: reward: a number
         """
 
         # TODO Need to implement termination on conditions being fulfilled
@@ -121,14 +127,11 @@ class MoleculeEnvironment(gym.Env):
         self._add_atom(action)
         self._modify_bond(action)
 
-        # calculate rewards
-        if self.check_valency() and self.check_chemical_validity():
-            reward = self.reward_function(self.action_space, self.observation_space)  # arbitrary choice
-        else:
-            reward = -self.reward_function(self.action_space, self.observation_space)  # arbitrary choice
+        # The reward function is assumed to check the molecule's valency and validity, and return negative values where relevant
+        reward = self.reward_function(self.action_space, self.observation_space)  # arbitrary choice
 
         self.cumulative_reward += reward
-        print(self.cumulative_reward)
+        # print(self.cumulative_reward)
 
         self.interim_reward += reward
 
@@ -145,14 +148,15 @@ class MoleculeEnvironment(gym.Env):
 
         return observation, reward, done, info
 
-    def render(self):
+    def render(self, mode="human"):
         # TODO add some exception handling, since the PYMOL server needs to be online for this to work
         if not self.pymol_window_flag:
             self.start_pymol()
 
         molecule = self.mol
-        # Generate 3D structure information
-        # Code adapted from https://github.com/rdkit/rdkit/issues/1433
+
+        self.mol.UpdatePropertyCache(strict=False)  # Update valence information
+        FastFindRings(self.mol)
         Chem.AddHs(molecule)
 
         # remove stereochemistry information
@@ -163,6 +167,9 @@ class MoleculeEnvironment(gym.Env):
         v = MolViewer()
         v.ShowMol(molecule)
         v.GetPNG(h=400)
+
+        pymol.cmd.save("./pymol_renderings/" + Chem.MolToSmiles(molecule) + ".pse", format="pse")
+        Chem.RemoveHs(molecule)
 
     def start_pymol(self):
         pymol.pymol_argv = ['pymol', '-R']
@@ -191,14 +198,13 @@ class MoleculeEnvironment(gym.Env):
     def _add_atom(self, action):
         """
         Adds an atom
-        :param action: one hot np array of dim d_n, where d_n is the number of
-        atom types
+        :param action: one hot np array of dim d_n, where d_n is the number of atom types
         :return:
         """
         atom_type_idx = action[0]
         atom_symbol = self.possible_atom_types[atom_type_idx]
         self.current_atom_idx = self.mol.AddAtom(Chem.Atom(atom_symbol))
-        self.total_atoms += 1
+        self.total_atoms = self.get_num_atoms()
 
     def _modify_bond(self, action):
         """
@@ -213,39 +219,13 @@ class MoleculeEnvironment(gym.Env):
             pass
         else:
             self.mol.AddBond(int(action[1]), int(action[2]), order=bond_type)
-            self.total_bonds += 1
+            self.total_bonds = self.get_num_bonds()
 
     def get_num_atoms(self):
-        return self.total_atoms
+        return self.mol.GetNumAtoms()
 
     def get_num_bonds(self):
-        return self.total_bonds
-
-    def check_chemical_validity(self):
-        """
-        Checks the chemical validity of the mol object. Existing mol object is
-        not modified
-        :return: True if chemically valid, False otherwise
-        """
-        s = Chem.MolToSmiles(self.mol, isomericSmiles=True)
-        m = Chem.MolFromSmiles(s)  # implicitly performs sanitization
-        if m:
-            return True
-        else:
-            return False
-
-    def check_valency(self):
-        """
-        Checks that no atoms in the mol have exceeded their possible
-        valency
-        :return: True if no valency issues, False otherwise
-        """
-        try:
-            Chem.SanitizeMol(self.mol,
-                             sanitizeOps=Chem.SanitizeFlags.SANITIZE_PROPERTIES)
-            return True
-        except ValueError:
-            return False
+        return len(self.mol.GetBonds())
 
     def get_matrices(self):
         """
