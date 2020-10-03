@@ -23,14 +23,13 @@ import copy
 #  compare the current product to the reference product
 
 class MoleculeEnvironment(gym.Env):
-    def __init__(self, reward_function, n_iterations, max_iterations, max_molecule_size=7, possible_atoms=None):
+    def __init__(self, reward_function, n_iterations, max_iterations, max_molecule_size=38, possible_atoms=None):
         """
         :param reward_function: A function that returns a reward value
         :param n_iterations: The number of iterations before an interim reward is retured
         :param max_iterations: User specified, the environment stop after this many iterations
         :param max_molecule_size: The maximum permitted number of atoms in this molecule
         :param possible_atoms: List of elements of the periodic table to be used in the environment
-        :param initial_atom: The atom to start the process with when reset() is called
         """
 
         if possible_atoms is None:
@@ -85,6 +84,7 @@ class MoleculeEnvironment(gym.Env):
 
     def reset(self, molecule=None):
         """
+        Resets the environment to its initial state, as defined by optional parameters
         :param molecule: SMILES string specifying the molecule to start with when the reset function is called
         :return:
         """
@@ -103,9 +103,19 @@ class MoleculeEnvironment(gym.Env):
     # TODO: Think about how to constrain the action to the valid actions (e.g. no atoms trying to bond to non-existing atoms)
     def step(self, action):
         """
-        Perform a given action
+        Perform a given action, returns a four tuple
         :param action: a list of 4 elements [atom_type, atom_index_1, atom_index_2, bond_type]
-        :return: reward: a number
+        Returns
+        -------
+        observation : [dict]
+            [Dictionary containing the np arrays of: adjacency matrix, dim n x n; edge feature matrix,
+                dim n x n x d_e; node feature matrix, dim n x d_n]
+        reward: [float]
+            [The reward resulting from completing the action]
+        done: [boolean]
+            [flag indicating whether the training process has been completed as defined by the user]
+        info: [dict]
+            [Contains the interim and cumulative rewards, as well as a bunch of other information useful for debugging]
         """
 
         # TODO Need to implement termination on conditions being fulfilled
@@ -113,7 +123,12 @@ class MoleculeEnvironment(gym.Env):
         # Note: The user-specified action must be valid,
         # if you want to join atoms at location 2 and 3 with a bond, these atoms must exist through prior actions
         info = {}
-        # self.mol_old = copy.deepcopy(self.mol)  # keep old mol
+        # mol_old = copy.deepcopy(self.mol)  # keep old mol
+
+        # Checking that the action contains valid values
+        assert action[0] < len(self.possible_atom_types)  # Atom choice
+        assert action[3] < len(self.possible_bond_types)  # Bond choice
+        assert action[1] < self.get_num_atoms() and action[2] < self.get_num_atoms()  # Connecting existing atoms
 
         terminate_condition = (self.mol.GetNumAtoms() >= self.max_molecule_size or
                                self.counter >= self.max_iterations)
@@ -127,6 +142,7 @@ class MoleculeEnvironment(gym.Env):
         self._add_atom(action)
         self._modify_bond(action)
 
+        # Todo: Check if the reward is negative, and revert back to old molecule if necessary?
         # The reward function is assumed to check the molecule's valency and validity, and return negative values where relevant
         reward = self.reward_function(self.action_space, self.observation_space)  # arbitrary choice
 
@@ -141,6 +157,7 @@ class MoleculeEnvironment(gym.Env):
         info['smiles'] = Chem.MolToSmiles(self.mol)
         info['reward'] = reward
 
+        # Reset the interim reward every n iterations
         if self.counter % self.n_iterations == 0:
             info['interim_reward'] = self._get_interim_reward()
         info['cumulative_reward'] = self.cumulative_reward
@@ -149,6 +166,10 @@ class MoleculeEnvironment(gym.Env):
         return observation, reward, done, info
 
     def render(self, mode="human"):
+        """
+        :param mode: Just a way of indicating whether the rendering is mainly for humans vs machines in OpenAI
+        :return: Nothing. This is just a visualization of the current molecule in our environment
+        """
         # TODO add some exception handling, since the PYMOL server needs to be online for this to work
         if not self.pymol_window_flag:
             self.start_pymol()
@@ -156,11 +177,14 @@ class MoleculeEnvironment(gym.Env):
         molecule = self.mol
 
         self.mol.UpdatePropertyCache(strict=False)  # Update valence information
-        FastFindRings(self.mol)
-        Chem.AddHs(molecule)
+        FastFindRings(
+            self.mol)  # Quick for finding out if an atom is in a ring, use Chem.GetSymmSSR() if more reliability is desired
+        Chem.AddHs(molecule)  # Add explicit hydrogen atoms for rendering purposes
 
         # remove stereochemistry information
         rdmolops.RemoveStereochemistry(molecule)
+
+        # Generate 3D structure
         AllChem.EmbedMolecule(molecule)
         AllChem.MMFFOptimizeMolecule(molecule)
 
@@ -168,23 +192,45 @@ class MoleculeEnvironment(gym.Env):
         v.ShowMol(molecule)
         v.GetPNG(h=400)
 
+        # Save the rendering in pse format
         pymol.cmd.save("./pymol_renderings/" + Chem.MolToSmiles(molecule) + ".pse", format="pse")
-        Chem.RemoveHs(molecule)
+        Chem.RemoveHs(molecule)  # Remove explicit hydrogen
 
     def start_pymol(self):
+        """
+        Starts the pymol process for rendering
+        """
         pymol.pymol_argv = ['pymol', '-R']
         pymol.finish_launching()
         self.pymol_window_flag = True
 
     def end_pymol(self):
+        """
+        Ends the pymol process
+        """
         pymol.cmd.quit()
         self.pymol_window_flag = False
 
     def seed(self, seed=None):
+        """
+        Sets the seed for the environment for replicable results where stochastic processes are involved.
+
+        Parameters
+        ----------
+        seed : [long]
+            [User specified long]
+        Returns
+        -------
+        [seed] : [list]
+            [List containing a single long value, following the convention of OpenAI Gym]
+        """
         np_random, seed = seeding.np_random(seed)
         return [seed]
 
     def close(self):
+        """
+        Performs some cleanup of the environment
+        """
         self.end_pymol()
 
     def _get_interim_reward(self):
