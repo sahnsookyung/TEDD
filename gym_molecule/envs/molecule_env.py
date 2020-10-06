@@ -2,19 +2,16 @@ import errno
 
 import gym
 from gym.utils import seeding
-
-from rdkit.Chem import AllChem
-
 import numpy as np
-import pymol
 
 from rdkit import Chem
-
+from rdkit.Chem import AllChem
 from rdkit.Chem.PyMol import MolViewer
 from rdkit.Chem import rdmolops
 from rdkit.Chem.rdmolops import FastFindRings
 import os
 
+import pymol
 import copy
 
 
@@ -128,7 +125,7 @@ class MoleculeEnvironment(gym.Env):
         # Checking that the action contains valid values
         assert action[0] < len(self.possible_atom_types)  # Atom choice
         assert action[3] < len(self.possible_bond_types)  # Bond choice
-        assert action[1] < self.get_num_atoms() and action[2] < self.get_num_atoms()  # Connecting existing atoms
+        assert action[1] <= self.get_num_atoms() and action[2] <= self.get_num_atoms()  # Connecting existing atoms
 
         terminate_condition = (self.mol.GetNumAtoms() >= self.max_molecule_size or
                                self.counter >= self.max_iterations)
@@ -168,7 +165,7 @@ class MoleculeEnvironment(gym.Env):
     def render(self, mode="human"):
         """
         :param mode: Just a way of indicating whether the rendering is mainly for humans vs machines in OpenAI
-        :return: Nothing. This is just a visualization of the current molecule in our environment
+        :return: void. This is just a visualization of the current molecule in our environment
         """
         # TODO add some exception handling, since the PYMOL server needs to be online for this to work
         if not self.pymol_window_flag:
