@@ -5,6 +5,7 @@ import numpy as np
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
+
 # TESTS
 
 # Class testing purpose methods
@@ -83,10 +84,15 @@ def check_valency(self):
     except ValueError:
         return False
 
+
 # End of test setup
 
 # Beginning of tests
-env = molecule_env.MoleculeEnvironment(reward_func, n_iterations=2, max_iterations=10)
+env = gym.make('molecule-v0')
+env.init(reward_func, n_iterations=2, max_iterations=10)
+
+
+# env = molecule_env.MoleculeEnvironment(reward_func, n_iterations=2, max_iterations=10)
 
 # TODO add tests for rewards, that it is an integer and it either increases or decreases
 
@@ -107,7 +113,7 @@ def test_reset():
     totalBonds = env.get_num_bonds()
     InterimReward = env.interim_reward
     CumulativeReward = env.cumulative_reward
-    counter = env.counter
+    counter = env.step_counter
 
     assert totalAtoms == 1
     assert totalBonds + InterimReward + CumulativeReward + counter == 0
@@ -120,7 +126,7 @@ def test_reset_molecule():
     totalBonds = env.get_num_bonds()
     InterimReward = env.interim_reward
     CumulativeReward = env.cumulative_reward
-    counter = env.counter
+    counter = env.step_counter
 
     assert totalAtoms == 3
     assert InterimReward + CumulativeReward + counter == 0
@@ -136,6 +142,7 @@ def test_step():
     assert Chem.MolToSmiles(env.mol) == "NCO"
     ob, reward, done, info = env.step([2, 2, 3, 1])
     assert Chem.MolToSmiles(env.mol) == "O=NCO"
+
 
 def test_render():
     # Paracetamol
@@ -170,6 +177,4 @@ def test_render():
     env.reset(
         "OCC(O)CC(O)[C@@H]1C[C@@H]2O[C@@]3(C[C@H](C)[C@@H]2O1)C[C@H](C)[C@@H]4O[C@]%10(C[C@@H]4O3)C[C@H]%11O[C@H]%12[C@H](C)[C@H]%13OC(=O)C[C@H]8CC[C@@H]9O[C@H]7[C@H]6O[C@]5(O[C@H]([C@@H]7O[C@@H]6C5)[C@H]9O8)CC[C@H]%15C/C(=C)[C@H](CC[C@H]%14C[C@@H](C)\C(=C)[C@@H](C[C@@H]%13O[C@H]%12C[C@H]%11O%10)O%14)O%15")
     env.render()
-
-    env.close()
 
