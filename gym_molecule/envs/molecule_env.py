@@ -25,7 +25,8 @@ class MoleculeEnvironment(gym.Env):
         pass
 
     def init(self, reward_function, n_iterations, max_iterations, max_molecule_size=38, possible_atoms=None,
-             terminate_on_done=False, expected_reward=0.5, target_reward=0.5):
+             terminate_on_done=False, expected_reward=0.5, target_reward=0.5, molecule_rollback=False,
+             reward_func_sees_all=True):
         """
         Constructor that exists outside of the __init__ method because gym doesn't allow addition of
         additional parameters when calling gym.make() function
@@ -48,6 +49,12 @@ class MoleculeEnvironment(gym.Env):
             Argument that will be passed into the RL method the user specifies
         target_reward: float
             Target reward for the RL method the user specifies
+        molecule_rollback: boolean
+            If this is set to true, then changes made to the molecule will be rolled back upon getting negative rewards
+        reward_func_sees_all: boolean
+            For reducing the visibility of the class to the reward function, useful for optimization purposes
+            since it drastically reduces the amount of information passed to the reward function. Being false,
+            it only provides the RWMol object to the reward function object
         """
 
         if possible_atoms is None:
@@ -94,6 +101,8 @@ class MoleculeEnvironment(gym.Env):
 
         self.pymol_window_flag = False
         self.terminate_on_done = terminate_on_done
+        self.molecule_rollback = molecule_rollback
+        self.reward_func_sees_all = reward_func_sees_all
 
         self.expected_reward = expected_reward
         self.target_reward = target_reward
@@ -150,15 +159,18 @@ class MoleculeEnvironment(gym.Env):
             info(dict): Contains the interim and cumulative rewards, as well as a bunch of other information useful for debugging
         """
 
-        # Note: The user-specified action must be valid,
-        # if you want to join atoms at location 2 and 3 with a bond, these atoms must exist through prior actions
-        info = {}
-        # mol_old = copy.deepcopy(self.mol)  # keep old mol
-
         # Checking that the action contains valid values
         assert action[0] < len(self.possible_atom_types)  # Atom choice
         assert action[3] < len(self.possible_bond_types)  # Bond choice
         assert action[1] <= self.get_num_atoms() and action[2] <= self.get_num_atoms()  # Connecting existing atoms
+
+        # Note: The user-specified action must be valid,
+        # if you want to join atoms at location 2 and 3 with a bond, these atoms must exist through prior actions
+        info = {}
+        self.step_counter += 1
+
+        if self.molecule_rollback is True:
+            mol_old = copy.deepcopy(self.mol)  # keep old mol
 
         terminate_condition = (self.mol.GetNumAtoms() >= self.max_molecule_size or
                                self.step_counter >= self.max_iterations)
@@ -169,14 +181,16 @@ class MoleculeEnvironment(gym.Env):
         else:
             done = False
 
-        self.step_counter += 1
-
         self._add_atom(action)
         self._modify_bond(action)
 
-        # Todo: Check if the reward is negative, and revert back to old molecule if necessary?
-        # The reward function is assumed to check the molecule's valency and validity, and return negative values where relevant
-        reward = self.reward_function(self.action_space, self.observation_space)  # arbitrary choice
+        if self.reward_func_sees_all:
+            reward = self.reward_function(self)  # arbitrary choice
+        else:
+            reward = self.reward_function(self.mol)
+
+        if self.molecule_rollback is True and reward < 0:
+            self.mol = mol_old
 
         self.cumulative_reward += reward
         # print(self.cumulative_reward)

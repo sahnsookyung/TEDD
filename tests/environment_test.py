@@ -51,10 +51,23 @@ def matrices_to_mol(A, E, F, node_feature_list, edge_feature_list):
 
 
 # Define external reward function for MoleculeEnvironment creation
-def reward_func(action_space, observation_space):
-    action_space = action_space
-    observation_space = observation_space
+def reward_func(moleculeEnvironment):
+    action_space = moleculeEnvironment.action_space
+    observation_space = moleculeEnvironment.observation_space
     return 1
+
+
+def reward_func_alternate(moleculeEnvironment, divisor=2):
+    # returns positive and negative reward of 1, alternating between the two. Modify divisor to change the frequency of
+    # positive rewards per negative reward
+
+    counter = moleculeEnvironment.step_counter
+    if (counter % divisor) == 0:
+        counter += 1
+        return -1
+    else:
+        counter += 1
+        return 1
 
 
 def check_chemical_validity(self):
@@ -89,7 +102,7 @@ def check_valency(self):
 
 # Beginning of tests
 env = gym.make('molecule-v0')
-env.init(reward_func, n_iterations=2, max_iterations=10)
+env.init(reward_func, n_iterations=2, max_iterations=10, reward_func_sees_all=True)
 
 
 # env = molecule_env.MoleculeEnvironment(reward_func, n_iterations=2, max_iterations=10)
@@ -119,7 +132,7 @@ def test_reset():
     assert totalBonds + InterimReward + CumulativeReward + counter == 0
 
 
-def test_reset_molecule():
+def test_reset_given_molecule():
     env.reset("NCO")
 
     totalAtoms = env.get_num_atoms()
@@ -144,37 +157,96 @@ def test_step():
     assert Chem.MolToSmiles(env.mol) == "O=NCO"
 
 
-def test_render():
-    # Paracetamol
-    env.reset("CC(=O)Nc1ccc(O)cc1")
-    env.render()
+def test_reward():
+    env.reset()
+    assert Chem.MolToSmiles(env.mol) == "C"
 
-    # Ibuprofen
-    env.reset("CC(C)Cc1ccc(cc1)[C@@H](C)C(=O)O")
-    env.render()
+    ob, reward, done, info = env.step([2, 0, 1, 0])
+    assert reward == 1
+    assert 'interim_reward' not in info
+    assert info['cumulative_reward'] == 1
+    assert Chem.MolToSmiles(env.mol) == "CO"
 
-    # Phospholipase A2 A2 isozyme CM-I, snake venom known to have anti-tumor properties
-    env.reset("CCCCCCCCNC(=O)Oc1cccc(OC(=O)C(c2ccccc2)(c2ccccc2)c2ccccc2)c1")
-    env.render()
+    ob, reward, done, info = env.step([1, 0, 2, 0])
+    assert reward == 1
+    assert 'interim_reward' in info and info['interim_reward'] == 2
+    assert info['cumulative_reward'] == 2
+    assert Chem.MolToSmiles(env.mol) == "NCO"
 
-    # Bergenin (cuscutin), a drug that shows a potent immunomodulatory effect
-    env.reset("OC[C@@H](O1)[C@@H](O)[C@H](O)[C@@H]2[C@@H]1c3c(O)c(OC)c(O)cc3C(=O)O2")
-    env.render()
+    ob, reward, done, info = env.step([2, 2, 3, 1])
+    assert reward == 1
+    assert 'interim_reward' not in info
+    assert info['cumulative_reward'] == 3
+    assert Chem.MolToSmiles(env.mol) == "O=NCO"
 
-    # amphetamine, a powerful stimulator of the central nervous system
-    env.reset("CC(N)Cc1ccccc1")
-    env.render()
+    test_reset()
 
-    # Squalene, an important candidate for COVID-19 vaccines, isomeric smiles
-    env.reset("CC(=CCC/C(=C/CC/C(=C/CC/C=C(/CC/C=C(/CCC=C(C)C)\C)\C)/C)/C)C")
-    env.render()
 
-    # Squalene, canonical smiles
-    env.reset("CC(=CCCC(=CCCC(=CCCC=C(C)CCC=C(C)CCC=C(C)C)C)C)C")
-    env.render()
+def test_molecule_rollback():
+    env2 = gym.make('molecule-v0')
+    env2.init(reward_func_alternate, n_iterations=2, max_iterations=10, molecule_rollback=True, reward_func_sees_all=True)
 
-    # Halichondrin B, a molecule with exquisite anticancer properties isolated from the marine sponge Halichondria okadai
-    env.reset(
-        "OCC(O)CC(O)[C@@H]1C[C@@H]2O[C@@]3(C[C@H](C)[C@@H]2O1)C[C@H](C)[C@@H]4O[C@]%10(C[C@@H]4O3)C[C@H]%11O[C@H]%12[C@H](C)[C@H]%13OC(=O)C[C@H]8CC[C@@H]9O[C@H]7[C@H]6O[C@]5(O[C@H]([C@@H]7O[C@@H]6C5)[C@H]9O8)CC[C@H]%15C/C(=C)[C@H](CC[C@H]%14C[C@@H](C)\C(=C)[C@@H](C[C@@H]%13O[C@H]%12C[C@H]%11O%10)O%14)O%15")
-    env.render()
+    env2.reset()
+    assert Chem.MolToSmiles(env2.mol) == "C"
+
+    ob, reward, done, info = env2.step([2, 0, 1, 0])
+    assert reward == 1
+    assert 'interim_reward' not in info
+    assert info['cumulative_reward'] == 1
+    assert Chem.MolToSmiles(env2.mol) == "CO"
+
+    ob, reward, done, info = env2.step([1, 0, 2, 0])
+    assert reward == -1
+    assert 'interim_reward' in info and info['interim_reward'] == 0
+    assert info['cumulative_reward'] == 0
+    assert Chem.MolToSmiles(env2.mol) == "CO"
+
+    ob, reward, done, info = env2.step([1, 0, 2, 0])
+    assert reward == 1
+    assert 'interim_reward' not in info
+    assert info['cumulative_reward'] == 1
+    assert Chem.MolToSmiles(env2.mol) == "NCO"
+
+    ob, reward, done, info = env2.step([2, 2, 3, 1])
+    assert reward == -1
+    assert 'interim_reward' in info and info['interim_reward'] == 0
+    assert info['cumulative_reward'] == 0
+    assert Chem.MolToSmiles(env2.mol) == "NCO"
+
+    test_reset()
+
+
+# def test_render():
+#     # Paracetamol
+#     env.reset("CC(=O)Nc1ccc(O)cc1")
+#     env.render()
+#
+#     # Ibuprofen
+#     env.reset("CC(C)Cc1ccc(cc1)[C@@H](C)C(=O)O")
+#     env.render()
+#
+#     # Phospholipase A2 A2 isozyme CM-I, snake venom known to have anti-tumor properties
+#     env.reset("CCCCCCCCNC(=O)Oc1cccc(OC(=O)C(c2ccccc2)(c2ccccc2)c2ccccc2)c1")
+#     env.render()
+#
+#     # Bergenin (cuscutin), a drug that shows a potent immunomodulatory effect
+#     env.reset("OC[C@@H](O1)[C@@H](O)[C@H](O)[C@@H]2[C@@H]1c3c(O)c(OC)c(O)cc3C(=O)O2")
+#     env.render()
+#
+#     # amphetamine, a powerful stimulator of the central nervous system
+#     env.reset("CC(N)Cc1ccccc1")
+#     env.render()
+#
+#     # Squalene, an important candidate for COVID-19 vaccines, isomeric smiles
+#     env.reset("CC(=CCC/C(=C/CC/C(=C/CC/C=C(/CC/C=C(/CCC=C(C)C)\C)\C)/C)/C)C")
+#     env.render()
+#
+#     # Squalene, canonical smiles
+#     env.reset("CC(=CCCC(=CCCC(=CCCC=C(C)CCC=C(C)CCC=C(C)C)C)C)C")
+#     env.render()
+#
+#     # Halichondrin B, a molecule with exquisite anticancer properties isolated from the marine sponge Halichondria okadai
+#     env.reset(
+#         "OCC(O)CC(O)[C@@H]1C[C@@H]2O[C@@]3(C[C@H](C)[C@@H]2O1)C[C@H](C)[C@@H]4O[C@]%10(C[C@@H]4O3)C[C@H]%11O[C@H]%12[C@H](C)[C@H]%13OC(=O)C[C@H]8CC[C@@H]9O[C@H]7[C@H]6O[C@]5(O[C@H]([C@@H]7O[C@@H]6C5)[C@H]9O8)CC[C@H]%15C/C(=C)[C@H](CC[C@H]%14C[C@@H](C)\C(=C)[C@@H](C[C@@H]%13O[C@H]%12C[C@H]%11O%10)O%14)O%15")
+#     env.render()
 
