@@ -216,37 +216,37 @@ def test_molecule_rollback():
     test_reset()
 
 
-# def test_render():
-#     # Paracetamol
-#     env.reset("CC(=O)Nc1ccc(O)cc1")
-#     env.render()
-#
-#     # Ibuprofen
-#     env.reset("CC(C)Cc1ccc(cc1)[C@@H](C)C(=O)O")
-#     env.render()
-#
-#     # Phospholipase A2 A2 isozyme CM-I, snake venom known to have anti-tumor properties
-#     env.reset("CCCCCCCCNC(=O)Oc1cccc(OC(=O)C(c2ccccc2)(c2ccccc2)c2ccccc2)c1")
-#     env.render()
-#
-#     # Bergenin (cuscutin), a drug that shows a potent immunomodulatory effect
-#     env.reset("OC[C@@H](O1)[C@@H](O)[C@H](O)[C@@H]2[C@@H]1c3c(O)c(OC)c(O)cc3C(=O)O2")
-#     env.render()
-#
-#     # amphetamine, a powerful stimulator of the central nervous system
-#     env.reset("CC(N)Cc1ccccc1")
-#     env.render()
-#
-#     # Squalene, an important candidate for COVID-19 vaccines, isomeric smiles
-#     env.reset("CC(=CCC/C(=C/CC/C(=C/CC/C=C(/CC/C=C(/CCC=C(C)C)\C)\C)/C)/C)C")
-#     env.render()
-#
-#     # Squalene, canonical smiles
-#     env.reset("CC(=CCCC(=CCCC(=CCCC=C(C)CCC=C(C)CCC=C(C)C)C)C)C")
-#     env.render()
-#
-#     # Halichondrin B, a molecule with exquisite anticancer properties isolated from the marine sponge Halichondria okadai
-#     env.reset(
-#         "OCC(O)CC(O)[C@@H]1C[C@@H]2O[C@@]3(C[C@H](C)[C@@H]2O1)C[C@H](C)[C@@H]4O[C@]%10(C[C@@H]4O3)C[C@H]%11O[C@H]%12[C@H](C)[C@H]%13OC(=O)C[C@H]8CC[C@@H]9O[C@H]7[C@H]6O[C@]5(O[C@H]([C@@H]7O[C@@H]6C5)[C@H]9O8)CC[C@H]%15C/C(=C)[C@H](CC[C@H]%14C[C@@H](C)\C(=C)[C@@H](C[C@@H]%13O[C@H]%12C[C@H]%11O%10)O%14)O%15")
-#     env.render()
+def test_render():
+    # Paracetamol
+    env.reset("CC(=O)Nc1ccc(O)cc1")
+    env.render()
+
+    # Ibuprofen
+    env.reset("CC(C)Cc1ccc(cc1)[C@@H](C)C(=O)O")
+    env.render()
+
+    # Phospholipase A2 A2 isozyme CM-I, snake venom known to have anti-tumor properties
+    env.reset("CCCCCCCCNC(=O)Oc1cccc(OC(=O)C(c2ccccc2)(c2ccccc2)c2ccccc2)c1")
+    env.render()
+
+    # Bergenin (cuscutin), a drug that shows a potent immunomodulatory effect
+    env.reset("OC[C@@H](O1)[C@@H](O)[C@H](O)[C@@H]2[C@@H]1c3c(O)c(OC)c(O)cc3C(=O)O2")
+    env.render()
+
+    # amphetamine, a powerful stimulator of the central nervous system
+    env.reset("CC(N)Cc1ccccc1")
+    env.render()
+
+    # Squalene, an important candidate for COVID-19 vaccines, isomeric smiles
+    env.reset("CC(=CCC/C(=C/CC/C(=C/CC/C=C(/CC/C=C(/CCC=C(C)C)\C)\C)/C)/C)C")
+    env.render()
+
+    # Squalene, canonical smiles
+    env.reset("CC(=CCCC(=CCCC(=CCCC=C(C)CCC=C(C)CCC=C(C)C)C)C)C")
+    env.render()
+
+    # Halichondrin B, a molecule with exquisite anticancer properties isolated from the marine sponge Halichondria okadai
+    env.reset(
+        "OCC(O)CC(O)[C@@H]1C[C@@H]2O[C@@]3(C[C@H](C)[C@@H]2O1)C[C@H](C)[C@@H]4O[C@]%10(C[C@@H]4O3)C[C@H]%11O[C@H]%12[C@H](C)[C@H]%13OC(=O)C[C@H]8CC[C@@H]9O[C@H]7[C@H]6O[C@]5(O[C@H]([C@@H]7O[C@@H]6C5)[C@H]9O8)CC[C@H]%15C/C(=C)[C@H](CC[C@H]%14C[C@@H](C)\C(=C)[C@@H](C[C@@H]%13O[C@H]%12C[C@H]%11O%10)O%14)O%15")
+    env.render()
 

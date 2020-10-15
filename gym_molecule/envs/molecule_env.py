@@ -337,6 +337,7 @@ class MoleculeEnvironment(gym.Env):
     def get_num_bonds(self):
         return len(self.mol.GetBonds())
 
+    # Code taken from https://github.com/bowenliu16/rl_graph_generation
     def get_matrices(self):
         """
         Get the adjacency matrix, edge feature matrix and, node feature matrix of the current molecule graph.
@@ -378,6 +379,7 @@ class MoleculeEnvironment(gym.Env):
 
         return A, E, F
 
+    # Code taken from https://github.com/bowenliu16/rl_graph_generation
     def check_chemical_validity(self):
         """
         Checks the chemical validity of the mol object. Existing mol object is not modified
@@ -393,6 +395,7 @@ class MoleculeEnvironment(gym.Env):
         else:
             return False
 
+    # Code taken from https://github.com/bowenliu16/rl_graph_generation
     def check_valency(self):
         """
         Checks that no atoms in the mol have exceeded their possible valency.
