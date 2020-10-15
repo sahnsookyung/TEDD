@@ -58,7 +58,10 @@ This assumes you have the anaconda environment set-up, and will generate documen
 
 * Make sure the anaconda environment mol-env is active. In Windows, run Anaconda prompt and run the command: ```conda activate mol-env``` in the project directory.
 * Create a docs directory in the project base directory.
-* Run ```sphinx-quickstart``` in the terminal/anaconda prompt. This will do some basic setup of the Sphinx documentation program and create some files, which include `conf.py` and `index.rst`. You will need to modify these files.
+* Run ```sphinx-quickstart``` in the terminal/anaconda prompt. When prompted whether to separate source and build path, select `y`. 
+The next 2 prompts of project and author name will not influence the document generation process and can take arbitrary values.
+This will do some basic setup of the Sphinx documentation program and create some files, which include `conf.py` and `index.rst`. 
+You will need to modify these files.
 * In the file `conf.py`, uncomment and change the lines 
 ```
 import os
