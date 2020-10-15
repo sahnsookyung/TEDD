@@ -87,4 +87,5 @@ to the index.rst file, above the ```.. toctree:: ``` line
 * Run ```make html``` to generate the HTML version of the documentation. The documentation will be found in `docs/build/html`, and can be viewed in `index.html`.
 
 ## Testing
-Pytest was used to test the environment, the user can run the tests from the project root directory.
+Pytest was used to test the environment, the user can run the tests from the project root directory. 
+You can run the test calling `pytest` which will run the tests. In linux, the render method will likely fail, but on Windows it works fine. 
