@@ -30,20 +30,58 @@ conda activate mol-env
 To get a working gym environment all that's needed is to use the provided repository structure 
 (see [here](https://github.com/openai/gym/blob/master/docs/creating-environments.md)):
 
-* Any dependencies that the environment needs must be defined in `setup.py`. 
-* The environment's entry point must be defined in `gym_molecule/__init__.py`
-* The environment needs to be imported into `gym_molecule/envs/__init.py__`
+* Dependencies that the environment needs have been defined in `setup.py`. 
+* The environment's entry point has been defined in `gym_molecule/__init__.py`
+* The environment has been imported into `gym_molecule/envs/__init.py__`
 * With this structure the environment can be installed with `pip install -e .`
 from the working directory.
-* The environment definition must be written in `gym_molecule/envs/molecule_env`,
-and should implement the interface provided by the `gym.Env` class (see 
+* The environment definition is written in `gym_molecule/envs/molecule_env`,
+and implements the interface provided by the `gym.Env` class (see 
 the definition [here](https://github.com/openai/gym/blob/master/gym/core.py)).
-* The essential methods which need definitions are `step, reset, render, seed,`
+* The essential methods defined are `step, reset, render, seed,`
 and `close`.
-* These stubs have been provided in gym_molecule/envs/molecule_env.py.
 
+## Installation
+* Install anaconda python and pip. 
+* Clone the repository from Gitlab/Github.
+* Navigate into the cloned repository (directory)
+* Run
+ ```conda env create -f environment.yml```
+* Run ```conda activate mol-env```
+* Run ```pip install -e .```
+* Run ```conda install -c schrodinger pymol-bundle```
+
+The above was tested on a Windows 10 machine. The render method seemed to break on a VM running Ubuntu, and we didn't get to test the above instructions on a fully fledged Linux machine.
+
+## Documentation Generation
+This assumes you have the anaconda environment set-up, and will generate documentation using Sphinx.
+
+* Make sure the anaconda environment mol-env is active. In Windows, run Anaconda prompt and run the command: ```conda activate mol-env``` in the project directory.
+* Create a docs directory in the project base directory.
+* Run ```sphinx-quickstart``` in the terminal/anaconda prompt. This will do some basic setup of the Sphinx documentation program and create some files, which include `conf.py` and `index.rst`. You will need to modify these files.
+* In the file `conf.py`, uncomment and change the lines 
+```
+import os
+import sys
+sys.path.insert(0, os.path.abspath('.'))
+``` 
+
+to
+
+``` 
+import os\\
+import sys\\
+sys.path.insert(0, os.path.abspath('../..'))
+```
+* Modify the ```extensions``` array in the `conf.py` file to ```extensions = ['sphinx.ext.autodoc', 'sphinx.ext.coverage', 'sphinx.ext.napoleon'].```
+
+* Add the line 
+```
+.. automodule:: gym_molecule.envs.molecule_env 
+    :members: 
+```
+to the index.rst file.
+* Run ```make html```. The documentation will be found in `docs/build/html`, and can be viewed in `index.html`.
 
 ## Testing
-Please use pytest to test the environment, an example test file 
-(see `tests/environment_test`) and a testing workflow script
-(see `.github/workflows/testing`) have been provided.
+Pytest was used to test the environment, the user can run the tests from the project root directory.
